@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direct Line — peer-to-peer chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1117; --surface:#161B24; --surface-2:#1E2530; --line:#2A3240;
+    --text:#E6E9EF; --muted:#8A94A6; --faint:#5B6478;
+    --azure:#4A86FF; --cyan:#35D6E8; --live:#34D399; --pending:#F5B14C; --danger:#FF6B6B;
+    --sans:'Inter',system-ui,sans-serif; --display:'Space Grotesk',var(--sans); --mono:'JetBrains Mono',ui-monospace,monospace;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(900px 500px at 15% -10%, rgba(74,134,255,.10), transparent 60%),
+      radial-gradient(800px 500px at 110% 10%, rgba(53,214,232,.07), transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .app{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.7);
+    display:flex;flex-direction:column;height:min(760px,92vh)}
+
+  /* header */
+  .top{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(255,255,255,.02),transparent)}
+  .mark{width:34px;height:34px;border-radius:10px;flex:none;position:relative;
+    background:linear-gradient(135deg,var(--azure),var(--cyan));display:grid;place-items:center}
+  .mark::before,.mark::after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;background:#0E1117}
+  .mark::before{left:9px}.mark::after{right:9px}
+  .mark i{position:absolute;height:2px;width:9px;background:#0E1117;border-radius:2px}
+  .brand{display:flex;flex-direction:column;line-height:1.1}
+  .brand b{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.2px}
+  .brand small{color:var(--muted);font-size:11px;letter-spacing:.3px}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+    font-family:var(--mono)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);position:relative}
+  .dot.live{background:var(--live)}
+  .dot.pending{background:var(--pending)}
+  .dot.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--live);
+    animation:ring 1.8s ease-out infinite;opacity:.6}
+  .dot.pending{animation:blink 1s steps(2) infinite}
+  @keyframes ring{to{transform:scale(2.4);opacity:0}}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* main scroll area */
+  .body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+  .body::-webkit-scrollbar{width:8px}
+  .body::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+
+  /* connect panel */
+  .panel{margin:auto 0;display:flex;flex-direction:column;gap:18px;animation:rise .4s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}}
+  .lead{text-align:center}
+  .lead h1{font-family:var(--display);font-weight:600;font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+  .lead p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5;max-width:38ch;margin-inline:auto}
+
+  /* the signature "wire" between two endpoints */
+  .wire{display:flex;align-items:center;gap:0;margin:2px auto 0;width:200px}
+  .end{width:12px;height:12px;border-radius:50%;background:var(--surface-2);border:2px solid var(--line);flex:none}
+  .end.on{border-color:var(--live);background:var(--live);box-shadow:0 0 12px var(--live)}
+  .thread{flex:1;height:2px;position:relative;overflow:hidden;background:var(--line)}
+  .thread b{position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    transform:translateX(-100%)}
+  .wire.pending .thread b{animation:flow 1.4s linear infinite}
+  .wire.live .thread{background:linear-gradient(90deg,var(--azure),var(--cyan))}
+  @keyframes flow{to{transform:translateX(200%)}}
+
+  .field{display:flex;flex-direction:column;gap:7px}
+  label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:600}
+  input,textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    border-radius:var(--r);padding:12px 13px;font-family:var(--sans);font-size:14px;resize:none;transition:border-color .15s}
+  textarea{font-family:var(--mono);font-size:12px;line-height:1.5;min-height:96px;color:#B9C2D0}
+  input:focus,textarea:focus{outline:none;border-color:var(--azure);box-shadow:0 0 0 3px rgba(74,134,255,.16)}
+  input::placeholder,textarea::placeholder{color:#4E576A}
+
+  .btns{display:flex;gap:10px}
+  button{font-family:var(--sans);font-weight:600;font-size:14px;border-radius:var(--r);
+    padding:12px 16px;border:1px solid transparent;cursor:pointer;transition:transform .08s,filter .15s,background .15s}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .primary{background:linear-gradient(135deg,var(--azure),#3f6dff);color:#fff;flex:1}
+  .primary:hover:not(:disabled){filter:brightness(1.08)}
+  .ghost{background:var(--surface-2);color:var(--text);border-color:var(--line);flex:1}
+  .ghost:hover:not(:disabled){border-color:var(--azure)}
+  .link{background:none;color:var(--muted);padding:6px;font-weight:500;font-size:12.5px}
+  .link:hover{color:var(--text)}
+
+  .code-box{position:relative}
+  .copy{position:absolute;top:8px;right:8px;padding:6px 10px;font-size:11px;background:var(--surface-2);
+    border:1px solid var(--line);color:var(--muted);border-radius:9px}
+  .copy:hover{color:var(--text);border-color:var(--azure)}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .hint b{color:var(--cyan);font-weight:600}
+
+  .steps{display:flex;gap:8px;font-size:11px;color:var(--muted);justify-content:center;font-family:var(--mono)}
+  .steps span.now{color:var(--cyan)}
+
+  /* chat bubbles */
+  .msg{max-width:78%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;
+    animation:pop .25s ease;word-wrap:break-word;position:relative}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}}
+  .msg.me{align-self:flex-end;background:linear-gradient(135deg,var(--azure),#3f6dff);color:#fff;border-bottom-right-radius:5px}
+  .msg.them{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line);border-bottom-left-radius:5px}
+  .meta{font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono);opacity:.8}
+  .msg.me .meta{color:rgba(255,255,255,.7);text-align:right}
+  .sys{align-self:center;font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);
+    padding:5px 12px;border-radius:20px;font-family:var(--mono)}
+  .typing{align-self:flex-start;display:flex;gap:4px;padding:11px 14px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:16px;border-bottom-left-radius:5px}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bob 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes bob{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+  /* composer */
+  .composer{display:none;gap:10px;padding:14px 16px;border-top:1px solid var(--line);align-items:flex-end;
+    background:linear-gradient(0deg,rgba(255,255,255,.02),transparent)}
+  .composer.on{display:flex}
+  .composer textarea{font-family:var(--sans);font-size:14px;min-height:44px;max-height:120px;color:var(--text);padding:11px 13px}
+  .send{width:44px;height:44px;flex:none;border-radius:12px;background:linear-gradient(135deg,var(--azure),var(--cyan));
+    color:#0E1117;display:grid;place-items:center;padding:0}
+  .send svg{width:19px;height:19px}
+  .send:disabled{background:var(--surface-2);color:var(--muted)}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--surface-2);border:1px solid var(--line);padding:9px 16px;border-radius:12px;font-size:13px;
+    transition:.25s;pointer-events:none;z-index:9}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="mark"><i></i></div>
+    <div class="brand"><b>Direct Line</b><small>peer-to-peer · no server · encrypted</small></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">offline</span></div>
+  </div>
+
+  <div class="body" id="body">
+    <!-- IDLE -->
+    <div class="panel" id="idle">
+      <div class="lead">
+        <h1>A direct line, browser to browser.</h1>
+        <p>Your messages travel straight to the other person over an encrypted connection. Nothing passes through a server, and nothing is stored.</p>
+      </div>
+      <div class="wire"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="field">
+        <label for="nick">Your name</label>
+        <input id="nick" maxlength="24" placeholder="e.g. Alex" autocomplete="off">
+      </div>
+      <div class="btns">
+        <button class="primary" id="startBtn">Start a line</button>
+        <button class="ghost" id="joinBtn">Join a line</button>
+      </div>
+      <p class="hint" style="text-align:center">One person starts and shares a code. The other joins with it. Works across different networks; both people need to be online at the same time.</p>
+    </div>
+
+    <!-- HOSTING: show invite, wait for answer -->
+    <div class="panel" id="hosting" hidden>
+      <div class="steps"><span class="now">1 · share code</span><span>→</span><span>2 · paste reply</span></div>
+      <div class="wire pending"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="field">
+        <label>Your invite code — send this to the other person</label>
+        <div class="code-box">
+          <textarea id="inviteOut" readonly></textarea>
+          <button class="copy" data-copy="inviteOut">Copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Their reply code — paste it here</label>
+        <textarea id="answerIn" placeholder="Paste the reply code they send back…"></textarea>
+      </div>
+      <div class="btns">
+        <button class="primary" id="connectBtn">Connect</button>
+        <button class="link" id="cancelHost">Cancel</button>
+      </div>
+    </div>
+
+    <!-- JOINING: paste invite, generate answer -->
+    <div class="panel" id="joining" hidden>
+      <div class="steps"><span>1 · paste code</span><span>→</span><span class="now">2 · send reply</span></div>
+      <div class="wire pending"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="field">
+        <label>Their invite code — paste it here</label>
+        <textarea id="inviteIn" placeholder="Paste the invite code you received…"></textarea>
+      </div>
+      <div class="field" id="answerWrap" hidden>
+        <label>Your reply code — send this back to them</label>
+        <div class="code-box">
+          <textarea id="answerOut" readonly></textarea>
+          <button class="copy" data-copy="answerOut">Copy</button>
+        </div>
+        <p class="hint"><b>Almost there.</b> Once they paste this in and connect, the line opens.</p>
+      </div>
+      <div class="btns">
+        <button class="primary" id="genAnswerBtn">Generate reply</button>
+        <button class="link" id="cancelJoin">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="composer" id="composer">
+    <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
+    <button class="send" id="sendBtn" disabled aria-label="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const ICE = { iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]};
+
+  let pc = null, channel = null;
+  let myName = 'You', peerName = 'Peer';
+  let typingTimer = null, peerTypingTimer = null;
+
+  // ---------- view helpers ----------
+  const panels = { idle: $('idle'), hosting: $('hosting'), joining: $('joining') };
+  function show(name){
+    for (const k in panels) panels[k].hidden = (k !== name);
+    $('composer').classList.toggle('on', name === 'chat');
+    if (name === 'chat') for (const k in panels) panels[k].hidden = true;
+  }
+  function setStatus(text, cls){
+    $('statusText').textContent = text;
+    $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+  }
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1600);
+  }
+  const encode = d => btoa(JSON.stringify({ t: d.type, s: d.sdp }));
+  function decode(str){
+    const o = JSON.parse(atob(str.trim()));
+    return { type: o.t, sdp: o.s };
+  }
+  function waitIce(pc){
+    return new Promise(res => {
+      if (pc.iceGatheringState === 'complete') return res();
+      const check = () => {
+        if (pc.iceGatheringState === 'complete'){
+          pc.removeEventListener('icegatheringstatechange', check); res();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange', check);
+      // safety fallback in case 'complete' never fires
+      setTimeout(res, 3000);
+    });
+  }
+
+  // ---------- peer connection ----------
+  function makePeer(){
+    pc = new RTCPeerConnection(ICE);
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if (s === 'disconnected') setStatus('reconnecting…', 'pending');
+      if (s === 'failed' || s === 'closed') { setStatus('disconnected'); sys('Connection lost.'); $('sendBtn').disabled = true; }
+    };
+  }
+  function wireChannel(ch){
+    channel = ch;
+    ch.onopen = () => {
+      setStatus(peerName, 'live');
+      show('chat');
+      $('sendBtn').disabled = false;
+      $('input').focus();
+      send({ k: 'hello', name: myName });
+      sys('Line open — you\u2019re connected directly.');
+    };
+    ch.onclose = () => { setStatus('disconnected'); $('sendBtn').disabled = true; sys('The other person left.'); };
+    ch.onmessage = e => handle(JSON.parse(e.data));
+  }
+  function send(obj){ if (channel && channel.readyState === 'open') channel.send(JSON.stringify(obj)); }
+
+  // ---------- messaging ----------
+  function handle(m){
+    if (m.k === 'hello'){ peerName = m.name || 'Peer'; setStatus(peerName, 'live'); return; }
+    if (m.k === 'typing'){ showPeerTyping(); return; }
+    if (m.k === 'msg'){ clearPeerTyping(); addMsg(m.text, false, m.ts); }
+  }
+  function addMsg(text, mine, ts){
+    const el = document.createElement('div');
+    el.className = 'msg ' + (mine ? 'me' : 'them');
+    const t = new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    el.innerHTML = '';
+    el.appendChild(document.createTextNode(text));
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = (mine ? '' : peerName + ' · ') + t;
+    el.appendChild(meta);
+    $('body').appendChild(el);
+    scroll();
+  }
+  function sys(text){
+    const el = document.createElement('div'); el.className = 'sys'; el.textContent = text;
+    $('body').appendChild(el); scroll();
+  }
+  function scroll(){ const b = $('body'); b.scrollTop = b.scrollHeight; }
+
+  function showPeerTyping(){
+    clearTimeout(peerTypingTimer);
+    if (!$('peerTyping')){
+      const el = document.createElement('div');
+      el.className = 'typing'; el.id = 'peerTyping';
+      el.innerHTML = '<span></span><span></span><span></span>';
+      $('body').appendChild(el); scroll();
+    }
+    peerTypingTimer = setTimeout(clearPeerTyping, 2500);
+  }
+  function clearPeerTyping(){ const el = $('peerTyping'); if (el) el.remove(); }
+
+  // ---------- send flow ----------
+  function sendMessage(){
+    const box = $('input'); const text = box.value.trim();
+    if (!text || !channel || channel.readyState !== 'open') return;
+    const ts = Date.now();
+    addMsg(text, true, ts);
+    send({ k: 'msg', text, ts });
+    box.value = ''; box.style.height = 'auto'; $('sendBtn').disabled = true;
+  }
+
+  // ---------- UI events ----------
+  $('startBtn').onclick = async () => {
+    myName = ($('nick').value.trim() || 'Guest');
+    makePeer();
+    wireChannel(pc.createDataChannel('chat'));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    show('hosting');
+    setStatus('waiting…', 'pending');
+    $('inviteOut').value = 'generating…';
+    await waitIce(pc);
+    $('inviteOut').value = encode(pc.localDescription);
+  };
+
+  $('joinBtn').onclick = () => {
+    myName = ($('nick').value.trim() || 'Guest');
+    show('joining'); setStatus('joining…', 'pending');
+  };
+
+  $('genAnswerBtn').onclick = async () => {
+    const raw = $('inviteIn').value.trim();
+    if (!raw) return toast('Paste the invite code first');
+    let offer;
+    try { offer = decode(raw); } catch { return toast('That code doesn\u2019t look right'); }
+    makePeer();
+    pc.ondatachannel = e => wireChannel(e.channel);
+    try {
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+    } catch { return toast('Couldn\u2019t read that invite code'); }
+    $('answerWrap').hidden = false;
+    $('genAnswerBtn').textContent = 'Regenerate reply';
+    $('answerOut').value = 'generating…';
+    await waitIce(pc);
+    $('answerOut').value = encode(pc.localDescription);
+  };
+
+  $('connectBtn').onclick = async () => {
+    const raw = $('answerIn').value.trim();
+    if (!raw) return toast('Paste their reply code first');
+    let answer;
+    try { answer = decode(raw); } catch { return toast('That reply code doesn\u2019t look right'); }
+    try { await pc.setRemoteDescription(answer); setStatus('connecting…', 'pending'); }
+    catch { toast('Couldn\u2019t complete the connection'); }
+  };
+
+  function reset(){
+    if (channel) try { channel.close(); } catch {}
+    if (pc) try { pc.close(); } catch {}
+    pc = channel = null;
+    show('idle'); setStatus('offline');
+  }
+  $('cancelHost').onclick = reset;
+  $('cancelJoin').onclick = reset;
+
+  // copy buttons
+  document.querySelectorAll('.copy').forEach(b => b.onclick = () => {
+    const el = $(b.dataset.copy);
+    el.select();
+    navigator.clipboard.writeText(el.value).then(() => toast('Copied')).catch(() => {
+      document.execCommand('copy'); toast('Copied');
+    });
+  });
+
+  // composer behaviour
+  const input = $('input');
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    $('sendBtn').disabled = !input.value.trim();
+    if (channel && channel.readyState === 'open'){
+      clearTimeout(typingTimer);
+      send({ k: 'typing' });
+      typingTimer = setTimeout(() => {}, 800);
+    }
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+  });
+  $('sendBtn').onclick = sendMessage;
+
+  $('nick').addEventListener('keydown', e => { if (e.key === 'Enter') $('startBtn').click(); });
+  $('nick').focus();
+})();
+</script>
+</body>
+</html>
