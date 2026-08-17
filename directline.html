@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direct Line — peer-to-peer group chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1117; --surface:#161B24; --surface-2:#1E2530; --line:#2A3240;
+    --text:#E6E9EF; --muted:#8A94A6; --faint:#5B6478;
+    --azure:#4A86FF; --cyan:#35D6E8; --live:#34D399; --pending:#F5B14C; --danger:#FF6B6B;
+    --sans:'Inter',system-ui,sans-serif; --display:'Space Grotesk',var(--sans); --mono:'JetBrains Mono',ui-monospace,monospace;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(900px 500px at 15% -10%, rgba(74,134,255,.10), transparent 60%),
+      radial-gradient(800px 500px at 110% 10%, rgba(53,214,232,.07), transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .app{width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.7);
+    display:flex;flex-direction:column;height:min(780px,92vh)}
+
+  /* header */
+  .top{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(255,255,255,.02),transparent)}
+  .mark{width:34px;height:34px;border-radius:10px;flex:none;position:relative;
+    background:linear-gradient(135deg,var(--azure),var(--cyan));display:grid;place-items:center}
+  .mark::before,.mark::after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;background:#0E1117}
+  .mark::before{left:9px}.mark::after{right:9px}
+  .mark i{position:absolute;height:2px;width:9px;background:#0E1117;border-radius:2px}
+  .brand{display:flex;flex-direction:column;line-height:1.1;min-width:0}
+  .brand b{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.2px}
+  .ver{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--muted);padding:1px 5px;
+    border:1px solid var(--line);border-radius:6px;margin-left:4px;vertical-align:middle;letter-spacing:0}
+  .brand small{color:var(--muted);font-size:11px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hbtn{background:var(--surface-2);border:1px solid var(--line);color:var(--text);font-size:12.5px;
+    font-weight:600;padding:7px 11px;border-radius:10px;cursor:pointer}
+  .hbtn:hover{border-color:var(--azure)}
+  .hbtn.leave{color:var(--muted);font-weight:500}
+  .hbtn.leave:hover{border-color:var(--danger);color:var(--danger)}
+  #netBtn{margin-left:auto}
+  .status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-family:var(--mono);margin-left:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);position:relative;flex:none}
+  .dot.live{background:var(--live)}
+  .dot.pending{background:var(--pending)}
+  .dot.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--live);
+    animation:ring 1.8s ease-out infinite;opacity:.6}
+  .dot.pending{animation:blink 1s steps(2) infinite}
+  @keyframes ring{to{transform:scale(2.4);opacity:0}}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* roster */
+  .roster{display:none;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);overflow-x:auto;
+    align-items:center;background:rgba(255,255,255,.015)}
+  .roster.on{display:flex}
+  .roster::-webkit-scrollbar{height:0}
+  .chip{display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:999px;flex:none;transition:border-color .15s}
+  .chip .av{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;
+    font-weight:600;color:#0E1117;font-family:var(--display);transition:box-shadow .12s}
+  .chip .nm{font-size:12.5px;color:var(--text);white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis}
+  .chip.me .nm{color:var(--muted)}
+  .chip.speaking{border-color:var(--live)}
+  .chip.speaking .av{box-shadow:0 0 0 2px var(--live),0 0 10px var(--live)}
+
+  /* main scroll */
+  .body{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+  .body::-webkit-scrollbar{width:8px}
+  .body::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+
+  .panel{margin:auto 0;display:flex;flex-direction:column;gap:18px;animation:rise .4s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}}
+  .lead{text-align:center}
+  .lead h1{font-family:var(--display);font-weight:600;font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+  .lead p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5;max-width:40ch;margin-inline:auto}
+
+  .wire{display:flex;align-items:center;gap:0;margin:2px auto 0;width:200px}
+  .end{width:12px;height:12px;border-radius:50%;background:var(--surface-2);border:2px solid var(--line);flex:none}
+  .thread{flex:1;height:2px;position:relative;overflow:hidden;background:var(--line)}
+  .thread b{position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    transform:translateX(-100%);animation:flow 1.4s linear infinite}
+  @keyframes flow{to{transform:translateX(200%)}}
+
+  .field{display:flex;flex-direction:column;gap:7px}
+  label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:600}
+  input,textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    border-radius:var(--r);padding:12px 13px;font-family:var(--sans);font-size:14px;resize:none;transition:border-color .15s}
+  textarea{font-family:var(--mono);font-size:12px;line-height:1.5;min-height:90px;color:#B9C2D0}
+  input:focus,textarea:focus{outline:none;border-color:var(--azure);box-shadow:0 0 0 3px rgba(74,134,255,.16)}
+  input::placeholder,textarea::placeholder{color:#4E576A}
+
+  .btns{display:flex;gap:10px}
+  button{font-family:var(--sans);font-weight:600;font-size:14px;border-radius:var(--r);
+    padding:12px 16px;border:1px solid transparent;cursor:pointer;transition:transform .08s,filter .15s,background .15s}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .primary{background:linear-gradient(135deg,var(--azure),#3f6dff);color:#fff;flex:1}
+  .primary:hover:not(:disabled){filter:brightness(1.08)}
+  .ghost{background:var(--surface-2);color:var(--text);border-color:var(--line);flex:1}
+  .ghost:hover:not(:disabled){border-color:var(--azure)}
+  .link{background:none;color:var(--muted);padding:6px;font-weight:500;font-size:12.5px}
+  .link:hover{color:var(--text)}
+
+  .code-box{position:relative}
+  .copy{position:absolute;top:8px;right:8px;padding:6px 10px;font-size:11px;background:var(--surface-2);
+    border:1px solid var(--line);color:var(--muted);border-radius:9px}
+  .copy:hover{color:var(--text);border-color:var(--azure)}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .hint b{color:var(--cyan);font-weight:600}
+  .steps{display:flex;gap:8px;font-size:11px;color:var(--muted);justify-content:center;font-family:var(--mono)}
+  .steps span.now{color:var(--cyan)}
+
+  /* bubbles */
+  .msg{max-width:78%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;
+    animation:pop .25s ease;word-wrap:break-word}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}}
+  .msg.me{align-self:flex-end;background:linear-gradient(135deg,var(--azure),#3f6dff);color:#fff;border-bottom-right-radius:5px}
+  .msg.them{align-self:flex-start;background:var(--surface-2);border:1px solid var(--line);border-bottom-left-radius:5px}
+  .meta{font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--mono);opacity:.85}
+  .msg.me .meta{color:rgba(255,255,255,.7);text-align:right}
+  .sys{align-self:center;font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);
+    padding:5px 12px;border-radius:20px;font-family:var(--mono);text-align:center}
+  .typing{align-self:flex-start;display:flex;gap:4px;padding:11px 14px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:16px;border-bottom-left-radius:5px}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bob 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes bob{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+  /* composer */
+  .composer{display:none;gap:10px;padding:14px 16px;border-top:1px solid var(--line);align-items:flex-end;
+    background:linear-gradient(0deg,rgba(255,255,255,.02),transparent)}
+  .composer.on{display:flex}
+  .composer textarea{font-family:var(--sans);font-size:14px;min-height:44px;max-height:120px;color:var(--text);padding:11px 13px}
+  .mic{width:44px;height:44px;flex:none;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);
+    color:var(--text);display:grid;place-items:center;padding:0;position:relative}
+  .mic:hover:not(.off){border-color:var(--azure)}
+  .mic svg{width:19px;height:19px}
+  .mic.muted{color:var(--danger);border-color:rgba(255,107,107,.45)}
+  .mic.off{opacity:.35;cursor:not-allowed}
+  .mic .lvl{position:absolute;inset:-3px;border-radius:14px;border:2px solid var(--live);opacity:0;transition:opacity .12s}
+  .mic.speaking .lvl{opacity:.85}
+  .micwrap{position:relative;flex:none}
+  .micmenu-btn{position:absolute;top:-6px;right:-6px;width:20px;height:20px;padding:0;border-radius:50%;
+    background:var(--surface);border:1px solid var(--line);color:var(--muted);display:grid;place-items:center;z-index:2;cursor:pointer}
+  .micmenu-btn:hover{color:var(--text);border-color:var(--azure)}
+  .micmenu-btn svg{width:11px;height:11px}
+  .micmenu{position:absolute;bottom:54px;left:0;min-width:220px;max-width:290px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 20px 50px -15px rgba(0,0,0,.7);z-index:25}
+  .micmenu[hidden]{display:none}
+  .mm-title{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:600;padding:6px 8px 4px}
+  .mm-row{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-weight:500;
+    font-size:13px;padding:8px 10px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mm-row:hover{background:var(--surface)}
+  .mm-row.on{color:var(--live)}
+  .mm-row.on::before{content:'\2713  '}
+  select{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:var(--r);
+    padding:11px 13px;font-family:var(--sans);font-size:14px;appearance:none;-webkit-appearance:none;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 18px) 18px,calc(100% - 13px) 18px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+  select:focus{outline:none;border-color:var(--azure);box-shadow:0 0 0 3px rgba(74,134,255,.16)}
+  .send{width:44px;height:44px;flex:none;border-radius:12px;background:linear-gradient(135deg,var(--azure),var(--cyan));
+    color:#0E1117;display:grid;place-items:center;padding:0}
+  .send svg{width:19px;height:19px}
+  .send:disabled{background:var(--surface-2);color:var(--muted)}
+
+  /* overlay / sheet */
+  .overlay{position:fixed;inset:0;background:rgba(8,10,14,.62);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
+  .overlay[hidden]{display:none}
+  .sheet{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--line);border-radius:18px;
+    padding:20px;box-shadow:0 30px 80px -20px rgba(0,0,0,.75);max-height:90vh;overflow-y:auto;animation:rise .3s ease}
+  .sheet .head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .sheet h2{font-family:var(--display);font-weight:600;font-size:18px;margin:0}
+  .sheet .x{margin-left:auto;background:none;color:var(--muted);padding:2px 8px;font-size:20px;line-height:1;border-radius:8px}
+  .sheet .x:hover{color:var(--text);background:var(--surface-2)}
+  .sheet .field+.field{margin-top:14px}
+  .sheet .btns{margin-top:16px}
+  .sheet .wire{margin-bottom:4px}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--surface-2);border:1px solid var(--line);padding:9px 16px;border-radius:12px;font-size:13px;
+    transition:.25s;pointer-events:none;z-index:30}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="mark"><i></i></div>
+    <div class="brand"><b>Direct Line <span class="ver" id="ver"></span></b><small>peer-to-peer · no server · encrypted</small></div>
+    <button class="hbtn" id="netBtn" title="Connection settings">Connection</button>
+    <button class="hbtn" id="inviteBtn" hidden>+ Invite</button>
+    <button class="hbtn leave" id="leaveBtn" hidden>Leave</button>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">offline</span></div>
+  </div>
+
+  <div class="roster" id="roster"></div>
+
+  <div class="body" id="body">
+    <div class="panel" id="idle">
+      <div class="lead">
+        <h1>A direct line — now for the whole group.</h1>
+        <p>Everyone connects straight to everyone else, encrypted, with no server in the middle. Start a room, then invite people one at a time.</p>
+      </div>
+      <div class="wire"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="field">
+        <label for="nick">Your name</label>
+        <input id="nick" maxlength="24" placeholder="e.g. Alex" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="micSelectIdle">Microphone</label>
+        <select id="micSelectIdle"></select>
+      </div>
+      <div class="btns">
+        <button class="primary" id="createBtn">Create room</button>
+        <button class="ghost" id="joinBtn">Join room</button>
+      </div>
+      <p class="hint" style="text-align:center">To join, you'll swap one code with someone already inside — they connect you to the rest of the room automatically. Everyone needs to be online at the same time.</p>
+      <button class="link" id="netBtnIdle" style="align-self:center">Connection settings (peer-to-peer options)</button>
+    </div>
+  </div>
+
+  <div class="composer" id="composer">
+    <div class="micwrap">
+    <button class="mic off" id="micBtn" aria-label="Mute microphone" title="Microphone">
+      <span class="lvl"></span>
+      <svg id="micOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+      <svg id="micOff" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5 10a7 7 0 0 0 10.7 6M19 10a7 7 0 0 1-.6 2.8M12 19v3M2 2l20 20"/></svg>
+    </button>
+    <button class="micmenu-btn" id="micMenuBtn" aria-label="Choose microphone" title="Choose microphone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>
+    </button>
+    <div class="micmenu" id="micMenu" hidden></div>
+    </div>
+    <textarea id="input" rows="1" placeholder="Message the room" autocomplete="off"></textarea>
+    <button class="send" id="sendBtn" disabled aria-label="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- modal -->
+<div class="overlay" id="overlay" hidden>
+  <div class="sheet">
+    <!-- invite -->
+    <div id="inviteView">
+      <div class="head"><h2>Invite someone</h2><button class="x" id="closeInvite" aria-label="Close">×</button></div>
+      <div class="wire"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="steps"><span class="now">1 · share code</span><span>→</span><span>2 · paste their reply</span></div>
+      <div class="field">
+        <label>Invite code — send this to the person joining</label>
+        <div class="code-box"><textarea id="inviteOut" readonly></textarea><button class="copy" data-copy="inviteOut">Copy</button></div>
+      </div>
+      <div class="field">
+        <label>Their reply code — paste it here</label>
+        <textarea id="replyIn" placeholder="Paste the reply code they send back…"></textarea>
+      </div>
+      <div class="btns"><button class="primary" id="connectBtn">Connect them</button></div>
+      <p class="hint" style="margin-top:12px">Invite one person at a time. Once they're in, they'll appear up top and you can invite the next.</p>
+    </div>
+    <!-- join -->
+    <div id="joinView" hidden>
+      <div class="head"><h2>Join a room</h2><button class="x" id="closeJoin" aria-label="Close">×</button></div>
+      <div class="wire"><span class="end"></span><span class="thread"><b></b></span><span class="end"></span></div>
+      <div class="steps"><span>1 · paste code</span><span>→</span><span class="now">2 · send reply</span></div>
+      <div class="field">
+        <label>Invite code — paste what you were sent</label>
+        <textarea id="inviteIn" placeholder="Paste the invite code you received…"></textarea>
+      </div>
+      <div class="field" id="answerWrap" hidden>
+        <label>Your reply code — send this back to them</label>
+        <div class="code-box"><textarea id="answerOut" readonly></textarea><button class="copy" data-copy="answerOut">Copy</button></div>
+        <p class="hint"><b>Almost there.</b> When they paste this in, you'll drop into the room and connect to everyone.</p>
+      </div>
+      <div class="btns"><button class="primary" id="genAnswerBtn">Generate reply</button></div>
+    </div>
+    <!-- connection -->
+    <div id="networkView" hidden>
+      <div class="head"><h2>Connection</h2><button class="x" id="closeNet" aria-label="Close">×</button></div>
+      <p class="hint" style="margin-bottom:16px">Direct Line is <b>peer-to-peer only</b> — no server ever relays your audio or messages. STUN below is just address discovery: it helps two peers on different networks find each other and never carries your data.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;cursor:pointer;line-height:1.45">
+        <input type="checkbox" id="useStun" checked style="width:auto;cursor:pointer;margin-top:2px">
+        <span><b>Use STUN to connect across networks</b><br><span style="color:var(--muted)">Recommended. Discovers your public address only — still fully peer-to-peer, nothing is relayed. Turn off for same-network or VPN use with zero external servers.</span></span>
+      </label>
+      <div class="field" style="margin-top:16px">
+        <label for="stunList">Your own STUN servers (optional, one per line)</label>
+        <textarea id="stunList" placeholder="stun:stun.l.google.com:19302"></textarea>
+      </div>
+      <div class="btns"><button class="primary" id="saveNet">Apply</button><button class="ghost" id="testNet">Test connection</button></div>
+      <p class="hint" id="netStatus" style="margin-top:12px">Applies to new connections. Set this before you create or join.</p>
+    </div>
+  </div>
+</div>
+
+<div id="audios" style="display:none"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const VERSION = 'v1.6.1';
+  $('ver').textContent = VERSION;
+  // ── Connection: pure peer-to-peer ──────────────────────────────────────
+  // Direct Line makes DIRECT browser-to-browser connections. No server ever
+  // relays your audio or messages. STUN below is only address discovery — it
+  // tells your browser its own public address so two peers on different
+  // networks can find each other, and never carries any of your data, so the
+  // connection stays fully peer-to-peer. Turn STUN off for same-network / VPN
+  // use with zero external servers involved at all.
+  const DEFAULT_STUN = [
+    { urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302'
+    ] }
+  ];
+  let useStun = true;      // discover public address (still P2P — no relay)
+  let customStun = [];     // optional self-hosted STUN urls
+  function iceConfig(){
+    if (!useStun) return { iceServers: [] };
+    return { iceServers: customStun.length ? customStun.map(u => ({ urls: u })) : DEFAULT_STUN };
+  }
+
+  const rid = () => Math.random().toString(36).slice(2, 9);
+  let myId = rid(), myName = 'You';
+  let localStream = null, audioCtx = null, muted = false, stopLocal = null, selectedMicId = null;
+  const peers = new Map();            // id -> { id, name, pc, channel, audioEl, stopMeter, pendingIce, bootstrap }
+  const seen = new Set(); let seq = 0;
+  let bootstrap = null;               // the in-progress manual (code-swap) peer
+  let inRoom = false;
+  let typingTimer = null, peerTypingTimer = null, lastTyping = 0;
+  const spkTimers = {};
+
+  // ---------- utils ----------
+  const encode = d => btoa(JSON.stringify({ t: d.type, s: d.sdp }));
+  const clean = s => (s || '').replace(/\s+/g, '');
+  function decode(str){
+    const o = JSON.parse(atob(clean(str)));
+    if (!o.t || !o.s) throw new Error('missing fields');
+    return { type: o.t, sdp: o.s };
+  }
+  function waitIce(pc){
+    return new Promise(res => {
+      if (pc.iceGatheringState === 'complete') return res();
+      let done = false, quiet, cap, gotPublic = false;
+      const finish = () => {
+        if (done) return; done = true;
+        clearTimeout(quiet); clearTimeout(cap);
+        pc.removeEventListener('icegatheringstatechange', onState);
+        pc.removeEventListener('icecandidate', onCand);
+        res();
+      };
+      const onState = () => { if (pc.iceGatheringState === 'complete') finish(); };
+      const onCand = e => {
+        if (!e.candidate){ finish(); return; }              // null candidate = gathering done
+        const c = e.candidate.candidate || '';
+        if (c.indexOf('typ srflx') !== -1 || c.indexOf('typ relay') !== -1) gotPublic = true;
+        // once we have a public-facing candidate, allow a short quiet window then send
+        if (gotPublic){ clearTimeout(quiet); quiet = setTimeout(finish, 1500); }
+      };
+      pc.addEventListener('icegatheringstatechange', onState);
+      pc.addEventListener('icecandidate', onCand);
+      cap = setTimeout(finish, 10000);                        // absolute cap so we never hang
+    });
+  }
+  function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1700); }
+  function hueOf(s){ let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+  function initialOf(n){ return ((n || '?').trim().charAt(0) || '?').toUpperCase(); }
+  const openPeers = () => [...peers.values()].filter(p => p.channel && p.channel.readyState === 'open');
+
+  // ---------- status / roster ----------
+  function setStatus(text, cls){ $('statusText').textContent = text; $('dot').className = 'dot' + (cls ? ' ' + cls : ''); }
+  function renderRoster(){
+    const r = $('roster'); r.innerHTML = '';
+    const chip = (id, name, me) => {
+      const el = document.createElement('div'); el.className = 'chip' + (me ? ' me' : ''); el.id = 'chip-' + id;
+      const av = document.createElement('span'); av.className = 'av'; av.textContent = initialOf(name);
+      av.style.background = 'hsl(' + hueOf(id) + ' 70% 60%)';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = me ? name + ' (you)' : name;
+      el.append(av, nm); return el;
+    };
+    r.appendChild(chip(myId, myName, true));
+    openPeers().forEach(p => r.appendChild(chip(p.id, p.name, false)));
+    const n = 1 + openPeers().length;
+    setStatus(n > 1 ? n + ' in the room' : 'waiting for others', n > 1 ? 'live' : 'pending');
+  }
+  function setSpeaking(id, on){
+    const chip = $('chip-' + id); if (!chip) return;
+    if (on){ chip.classList.add('speaking'); clearTimeout(spkTimers[id]); spkTimers[id] = setTimeout(() => chip.classList.remove('speaking'), 200); }
+  }
+
+  // ---------- voice ----------
+  async function getMic(){
+    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    if (selectedMicId) audio.deviceId = { exact: selectedMicId };
+    try { return await navigator.mediaDevices.getUserMedia({ audio, video: false }); }
+    catch {
+      try { return await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); } catch { return null; }
+    }
+  }
+  async function refreshMics(){
+    let devices = [];
+    try { devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput'); } catch {}
+    const sel = $('micSelectIdle');
+    if (sel){
+      sel.innerHTML = '';
+      const def = document.createElement('option'); def.value = ''; def.textContent = 'Default microphone'; sel.appendChild(def);
+      devices.forEach((d, i) => {
+        const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Microphone ' + (i + 1));
+        if (d.deviceId === selectedMicId) o.selected = true; sel.appendChild(o);
+      });
+    }
+    const menu = $('micMenu'); menu.innerHTML = '';
+    const title = document.createElement('div'); title.className = 'mm-title'; title.textContent = 'Microphone'; menu.appendChild(title);
+    const row = (id, label) => {
+      const b = document.createElement('button');
+      b.className = 'mm-row' + ((id || '') === (selectedMicId || '') ? ' on' : '');
+      b.textContent = label;
+      b.onclick = () => { $('micMenu').hidden = true; switchMic(id || null); };
+      menu.appendChild(b);
+    };
+    row('', 'Default microphone');
+    devices.forEach((d, i) => row(d.deviceId, d.label || ('Microphone ' + (i + 1))));
+  }
+  async function switchMic(deviceId){
+    selectedMicId = deviceId || null;
+    const prev = localStream, wasMuted = muted;
+    let stream = await getMic();
+    if (!stream){ toast('Could not open that microphone'); return; }
+    localStream = stream;
+    const track = stream.getAudioTracks()[0];
+    if (track) track.enabled = !wasMuted;
+    let addedNew = false;
+    peers.forEach(p => {
+      const sender = p.pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+      if (sender && track) sender.replaceTrack(track).catch(() => {});
+      else if (track){ try { p.pc.addTrack(track, stream); addedNew = true; } catch {} }
+    });
+    if (prev) prev.getTracks().forEach(t => t.stop());
+    $('micBtn').classList.remove('off');
+    startLocalMeter();
+    await refreshMics();
+    toast(addedNew ? 'Mic added — others may need you to rejoin to hear it' : 'Microphone switched');
+  }
+  function meter(stream, onLevel){
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const src = audioCtx.createMediaStreamSource(stream), an = audioCtx.createAnalyser();
+      an.fftSize = 512; src.connect(an);
+      const buf = new Uint8Array(an.frequencyBinCount); let raf;
+      (function loop(){
+        an.getByteTimeDomainData(buf);
+        let s = 0; for (let i = 0; i < buf.length; i++){ const v = (buf[i] - 128) / 128; s += v * v; }
+        onLevel(Math.sqrt(s / buf.length)); raf = requestAnimationFrame(loop);
+      })();
+      return () => { cancelAnimationFrame(raf); try { src.disconnect(); } catch {} };
+    } catch { return () => {}; }
+  }
+  function startLocalMeter(){
+    if (!localStream) return;
+    if (stopLocal) stopLocal();
+    let micT;
+    stopLocal = meter(localStream, rms => {
+      const on = rms > 0.045 && !muted;
+      setSpeaking(myId, on);
+      if (on){ $('micBtn').classList.add('speaking'); clearTimeout(micT); micT = setTimeout(() => $('micBtn').classList.remove('speaking'), 180); }
+    });
+  }
+  function attachRemoteAudio(p, stream){
+    if (!p.audioEl){ const a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline',''); $('audios').appendChild(a); p.audioEl = a; }
+    p.audioEl.srcObject = stream; p.audioEl.play().catch(() => {});
+    if (p.stopMeter) p.stopMeter();
+    p.stopMeter = meter(stream, rms => setSpeaking(p.id, rms > 0.03));
+  }
+  $('micBtn').onclick = () => {
+    if (!localStream) return;
+    muted = !muted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+    $('micBtn').classList.toggle('muted', muted);
+    $('micOn').style.display = muted ? 'none' : '';
+    $('micOff').style.display = muted ? '' : 'none';
+    toast(muted ? 'Microphone muted' : 'Microphone on');
+  };
+  $('micMenuBtn').onclick = async e => {
+    e.stopPropagation();
+    const m = $('micMenu');
+    if (m.hidden){ await refreshMics(); m.hidden = false; } else m.hidden = true;
+  };
+  $('micMenu').onclick = e => e.stopPropagation();
+  document.addEventListener('click', () => { $('micMenu').hidden = true; });
+
+  // ---------- peer plumbing ----------
+  function addTracks(p){ if (localStream) localStream.getTracks().forEach(t => p.pc.addTrack(t, localStream)); }
+  function common(p){
+    p.pc.onicecandidate = e => { if (e.candidate && p.id) relay({ sub: 'ice', to: p.id, from: myId, candidate: e.candidate }); };
+    p.pc.ontrack = e => attachRemoteAudio(p, e.streams[0]);
+    p.pc.oniceconnectionstatechange = () => { if (p.pc.iceConnectionState === 'failed') iceFailed(); };
+    p.pc.onconnectionstatechange = () => {
+      const s = p.pc.connectionState;
+      if (s === 'failed') iceFailed();
+      if ((s === 'failed' || s === 'closed') && p.id) removePeer(p.id);
+    };
+  }
+  let warnedIce = false;
+  function iceFailed(){
+    if (warnedIce) return; warnedIce = true;
+    toast('Direct connection failed — networks too strict');
+    if (inRoom) sys('A direct connection failed. These two networks are too strict to link peer-to-peer. Try being on the same Wi-Fi, a phone hotspot, or a shared VPN — that puts you on one network so a direct connection can form.');
+  }
+  function wire(p){
+    const ch = p.channel;
+    ch.onopen = () => {
+      send(p, { k: 'hello', id: myId, name: myName });
+      enterRoom();
+      renderRoster();
+      if (p.bootstrap) $('overlay').hidden = true;
+    };
+    ch.onclose = () => { if (p.id) removePeer(p.id); };
+    ch.onmessage = e => onMessage(p, JSON.parse(e.data));
+  }
+  function send(p, obj){ try { if (p.channel && p.channel.readyState === 'open') p.channel.send(JSON.stringify(obj)); } catch {} }
+
+  function onMessage(p, m){
+    if (m.k === 'hello'){
+      const isNew = !p.id;
+      p.id = m.id; p.name = m.name || 'Peer';
+      if (!peers.has(p.id)) peers.set(p.id, p);
+      if (p.bootstrap === 'inviter' && isNew){ welcome(p); toast(p.name + ' joined'); }
+      p.bootstrap = null;
+      renderRoster();
+      return;
+    }
+    if (m.k === 'welcome'){ (m.members || []).forEach(mm => { if (mm.id !== myId && !peers.has(mm.id)) connectTo(mm.id, mm.name); }); return; }
+    if (m.k === 'relay'){ onRelay(p, m.payload); return; }
+    if (m.k === 'msg'){ clearPeerTyping(); addMsg(m.text, false, m.ts, m.name || p.name); return; }
+    if (m.k === 'typing'){ showPeerTyping(m.name || p.name); return; }
+  }
+
+  function welcome(p){
+    const members = openPeers().filter(q => q !== p && q.id).map(q => ({ id: q.id, name: q.name }));
+    send(p, { k: 'welcome', members });
+  }
+
+  // ---------- relayed signaling (flood with dedup) ----------
+  function relay(msg){
+    if (!msg.mid){ msg.mid = myId + ':' + (++seq); }
+    seen.add(msg.mid);
+    const t = peers.get(msg.to);
+    if (t && t.channel && t.channel.readyState === 'open'){ send(t, { k: 'relay', payload: msg }); return; }
+    openPeers().forEach(p => send(p, { k: 'relay', payload: msg }));
+  }
+  function onRelay(from, msg){
+    if (msg.mid){ if (seen.has(msg.mid)) return; seen.add(msg.mid); }
+    if (msg.to === myId){ handleSignal(msg); return; }
+    const t = peers.get(msg.to);
+    if (t && t.channel && t.channel.readyState === 'open'){ send(t, { k: 'relay', payload: msg }); return; }
+    openPeers().forEach(p => { if (p !== from) send(p, { k: 'relay', payload: msg }); });
+  }
+  async function handleSignal(msg){
+    if (msg.sub === 'offer'){
+      let p = peers.get(msg.from) || newAuto(msg.from, msg.name, false);
+      try {
+        await p.pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+        drainIce(p);
+        const ans = await p.pc.createAnswer();
+        await p.pc.setLocalDescription(ans);
+        relay({ sub: 'answer', to: msg.from, from: myId, name: myName, sdp: ans.sdp });
+      } catch {}
+    } else if (msg.sub === 'answer'){
+      const p = peers.get(msg.from); if (!p) return;
+      try { await p.pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp }); drainIce(p); } catch {}
+    } else if (msg.sub === 'ice'){
+      const p = peers.get(msg.from); if (!p) return;
+      if (p.pc.remoteDescription && p.pc.remoteDescription.type) { try { await p.pc.addIceCandidate(msg.candidate); } catch {} }
+      else (p.pendingIce = p.pendingIce || []).push(msg.candidate);
+    }
+  }
+  function drainIce(p){ if (p.pendingIce){ p.pendingIce.forEach(c => p.pc.addIceCandidate(c).catch(() => {})); p.pendingIce = []; } }
+
+  function newAuto(id, name, initiator){
+    const p = { id, name: name || 'Peer', pc: new RTCPeerConnection(iceConfig()), channel: null, pendingIce: [], bootstrap: null };
+    peers.set(id, p); addTracks(p); common(p);
+    if (initiator){ p.channel = p.pc.createDataChannel('chat'); wire(p); }
+    else p.pc.ondatachannel = e => { p.channel = e.channel; wire(p); };
+    return p;
+  }
+  async function connectTo(id, name){
+    if (peers.has(id)) return;
+    const p = newAuto(id, name, true);
+    try { const offer = await p.pc.createOffer(); await p.pc.setLocalDescription(offer); relay({ sub: 'offer', to: id, from: myId, name: myName, sdp: offer.sdp }); }
+    catch {}
+  }
+
+  // ---------- manual bootstrap (the one code swap) ----------
+  async function makeInvite(){
+    const p = { id: null, name: 'Peer', pc: new RTCPeerConnection(iceConfig()), channel: null, pendingIce: [], bootstrap: 'inviter' };
+    bootstrap = p; addTracks(p); common(p);
+    p.channel = p.pc.createDataChannel('chat'); wire(p);
+    $('inviteOut').value = 'generating…';
+    const offer = await p.pc.createOffer();
+    await p.pc.setLocalDescription(offer);
+    await waitIce(p.pc);
+    $('inviteOut').value = encode(p.pc.localDescription);
+  }
+  async function acceptReply(raw){
+    if (!bootstrap) return toast('Generate an invite first');
+    let ans; try { ans = decode(raw); } catch { return toast('That reply looks incomplete — copy the whole thing'); }
+    if (ans.type !== 'answer') return toast('That\u2019s an invite code, not a reply.');
+    if (bootstrap.pc.signalingState !== 'have-local-offer') return toast('That invite was already used — generate a fresh one.');
+    try { await bootstrap.pc.setRemoteDescription(ans); toast('Connecting…'); }
+    catch (e){ toast('Couldn\u2019t complete: ' + e.message); }
+  }
+  async function makeAnswer(raw){
+    let offer; try { offer = decode(raw); } catch { return toast('That code looks incomplete — copy the whole thing'); }
+    if (offer.type !== 'offer') return toast('That\u2019s not an invite. Paste the code from someone in the room.');
+    const p = { id: null, name: 'Peer', pc: new RTCPeerConnection(iceConfig()), channel: null, pendingIce: [], bootstrap: 'joiner' };
+    bootstrap = p; addTracks(p); common(p);
+    p.pc.ondatachannel = e => { p.channel = e.channel; wire(p); };
+    try {
+      await p.pc.setRemoteDescription(offer);
+      const ans = await p.pc.createAnswer();
+      await p.pc.setLocalDescription(ans);
+    } catch (e){ return toast('Couldn\u2019t read that invite: ' + e.message); }
+    $('answerOut').value = 'generating…';
+    await waitIce(p.pc);
+    $('answerOut').value = encode(p.pc.localDescription);
+    $('answerWrap').hidden = false;
+    $('genAnswerBtn').textContent = 'Regenerate reply';
+  }
+
+  // ---------- room lifecycle ----------
+  function enterRoom(){
+    if (inRoom) return; inRoom = true;
+    $('idle').hidden = true;
+    $('composer').classList.add('on');
+    $('roster').classList.add('on');
+    $('inviteBtn').hidden = false; $('leaveBtn').hidden = false;
+    $('sendBtn').disabled = false;
+    $('input').focus();
+    sys('You\u2019re in. People you connect to appear up top.');
+    sys(localStream ? 'Voice on — just start talking.' : 'Text-only on your side (mic unavailable).');
+    renderRoster();
+  }
+  function removePeer(id){
+    const p = peers.get(id); if (!p) return;
+    try { p.pc.close(); } catch {}
+    if (p.stopMeter) p.stopMeter();
+    if (p.audioEl) p.audioEl.remove();
+    peers.delete(id);
+    const chip = $('chip-' + id); if (chip) chip.remove();
+    sys((p.name || 'Someone') + ' left.');
+    renderRoster();
+  }
+  function leaveRoom(){
+    peers.forEach(p => { try { p.pc.close(); } catch {} if (p.stopMeter) p.stopMeter(); if (p.audioEl) p.audioEl.remove(); });
+    peers.clear();
+    if (bootstrap){ try { bootstrap.pc.close(); } catch {} bootstrap = null; }
+    if (localStream){ try { localStream.getTracks().forEach(t => t.stop()); } catch {} localStream = null; }
+    if (stopLocal) stopLocal();
+    seen.clear();
+    warnedIce = false;
+    inRoom = false; muted = false; myId = rid();
+    $('overlay').hidden = true;
+    $('composer').classList.remove('on');
+    $('roster').classList.remove('on'); $('roster').innerHTML = '';
+    $('inviteBtn').hidden = true; $('leaveBtn').hidden = true;
+    [...$('body').children].forEach(c => { if (c.id !== 'idle') c.remove(); });
+    $('idle').hidden = false;
+    $('audios').innerHTML = '';
+    $('micBtn').classList.remove('muted', 'speaking'); $('micOn').style.display = ''; $('micOff').style.display = 'none';
+    $('micBtn').classList.add('off');
+    setStatus('offline');
+  }
+
+  // ---------- messages ----------
+  function sendMessage(){
+    const box = $('input'); const text = box.value.trim(); if (!text) return;
+    const ts = Date.now();
+    addMsg(text, true, ts, myName);
+    openPeers().forEach(p => send(p, { k: 'msg', text, ts, name: myName }));
+    box.value = ''; box.style.height = 'auto'; $('sendBtn').disabled = true;
+  }
+  function addMsg(text, mine, ts, name){
+    const el = document.createElement('div'); el.className = 'msg ' + (mine ? 'me' : 'them');
+    el.appendChild(document.createTextNode(text));
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const t = new Date(ts || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    meta.textContent = (mine ? '' : name + ' · ') + t; el.appendChild(meta);
+    $('body').appendChild(el); scroll();
+  }
+  function sys(text){ const el = document.createElement('div'); el.className = 'sys'; el.textContent = text; $('body').appendChild(el); scroll(); }
+  function scroll(){ const b = $('body'); b.scrollTop = b.scrollHeight; }
+  function showPeerTyping(name){
+    clearTimeout(peerTypingTimer);
+    let el = $('peerTyping');
+    if (!el){ el = document.createElement('div'); el.className = 'typing'; el.id = 'peerTyping'; el.innerHTML = '<span></span><span></span><span></span>'; $('body').appendChild(el); scroll(); }
+    peerTypingTimer = setTimeout(clearPeerTyping, 2500);
+  }
+  function clearPeerTyping(){ const el = $('peerTyping'); if (el) el.remove(); }
+
+  // ---------- overlay controls ----------
+  function showSheet(view){ ['inviteView', 'joinView', 'networkView'].forEach(v => $(v).hidden = (v !== view)); $('overlay').hidden = false; }
+  function openInvite(){ $('replyIn').value = ''; showSheet('inviteView'); makeInvite(); }
+  function openJoin(){ $('inviteIn').value = ''; $('answerOut').value = ''; $('answerWrap').hidden = true; $('genAnswerBtn').textContent = 'Generate reply'; showSheet('joinView'); }
+  function openNetwork(){ $('useStun').checked = useStun; $('stunList').value = customStun.join('\n'); showSheet('networkView'); }
+  function applyConn(){
+    useStun = $('useStun').checked;
+    const entries = $('stunList').value.split(/\s+/).map(s => s.trim()).filter(Boolean);
+    const stun = entries.filter(u => /^stun:/i.test(u));
+    const dropped = entries.length - stun.length;
+    customStun = stun;
+    let note = useStun
+      ? (customStun.length ? 'Using ' + customStun.length + ' custom STUN server(s). Fully peer-to-peer.' : 'Using default STUN. Fully peer-to-peer — nothing relayed.')
+      : 'STUN off — direct only. Works on the same network or a shared VPN, with zero external servers.';
+    if (dropped) note += ' (' + dropped + ' non-stun entr' + (dropped === 1 ? 'y' : 'ies') + ' ignored — this app stays relay-free.)';
+    $('netStatus').textContent = note;
+    toast('Connection settings applied');
+  }
+  $('inviteBtn').onclick = openInvite;
+  $('netBtn').onclick = openNetwork;
+  $('netBtnIdle').onclick = openNetwork;
+  $('closeNet').onclick = () => { $('overlay').hidden = true; };
+  $('saveNet').onclick = applyConn;
+  $('testNet').onclick = testConn;
+  async function testConn(){
+    $('netStatus').textContent = 'Testing your network…';
+    applyConn();
+    const pc = new RTCPeerConnection(iceConfig());
+    const types = new Set();
+    pc.createDataChannel('t');
+    pc.onicecandidate = e => {
+      if (!e.candidate) return;
+      const m = (e.candidate.candidate || '').match(/typ (\w+)/);
+      if (m) types.add(m[1]);
+    };
+    try { await pc.setLocalDescription(await pc.createOffer()); } catch {}
+    await new Promise(r => setTimeout(r, 4000));
+    pc.close();
+    const list = [...types].join(', ') || 'none';
+    let verdict;
+    if (types.has('srflx'))
+      verdict = 'Good — a public address (srflx) was found, so you can reach peers on other networks directly. If a specific call still fails, it\u2019s the other person\u2019s network that\u2019s too strict.';
+    else if (types.has('host'))
+      verdict = 'Only local (host) candidates — STUN got no public address, so UDP is likely blocked here. You\u2019ll only connect on the same network or a shared VPN. (Make sure STUN is on above.)';
+    else
+      verdict = 'No candidates gathered — check that you\u2019re online.';
+    $('netStatus').textContent = 'Candidate types: ' + list + '. ' + verdict;
+  }
+  $('leaveBtn').onclick = leaveRoom;
+  $('closeInvite').onclick = () => { $('overlay').hidden = true; };
+  $('closeJoin').onclick = () => { $('overlay').hidden = true; if (!inRoom){ if (bootstrap){ try { bootstrap.pc.close(); } catch {} bootstrap = null; } } };
+  $('connectBtn').onclick = () => acceptReply($('replyIn').value.trim());
+  $('genAnswerBtn').onclick = () => makeAnswer($('inviteIn').value.trim());
+
+  document.querySelectorAll('.copy').forEach(b => b.onclick = () => {
+    const el = $(b.dataset.copy); el.select();
+    navigator.clipboard.writeText(el.value).then(() => toast('Copied')).catch(() => { try { document.execCommand('copy'); toast('Copied'); } catch {} });
+  });
+
+  // ---------- composer ----------
+  const input = $('input');
+  input.addEventListener('input', () => {
+    input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    $('sendBtn').disabled = !input.value.trim();
+    const now = Date.now();
+    if (now - lastTyping > 700){ lastTyping = now; openPeers().forEach(p => send(p, { k: 'typing', name: myName })); }
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+  $('sendBtn').onclick = sendMessage;
+
+  // ---------- idle panel ----------
+  function bindIdle(){
+    $('createBtn').onclick = async () => { myName = $('nick').value.trim() || 'Guest'; localStream = await getMic(); if (localStream){ $('micBtn').classList.remove('off'); startLocalMeter(); refreshMics(); } enterRoom(); openInvite(); };
+    $('joinBtn').onclick = async () => { myName = $('nick').value.trim() || 'Guest'; localStream = await getMic(); if (localStream){ $('micBtn').classList.remove('off'); startLocalMeter(); refreshMics(); } openJoin(); };
+    $('micSelectIdle').onchange = e => { selectedMicId = e.target.value || null; };
+    $('nick').addEventListener('keydown', e => { if (e.key === 'Enter') $('createBtn').click(); });
+    $('nick').focus();
+    refreshMics();
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
+      navigator.mediaDevices.addEventListener('devicechange', refreshMics);
+  }
+  bindIdle();
+})();
+</script>
+</body>
+</html>
